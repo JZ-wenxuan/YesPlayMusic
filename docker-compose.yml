@@ -20,4 +20,4 @@ services:
     expose:
       - 8080
     restart: always
-    command: -o ytdlp kuwo kugou
+    command: -o ytdlp kugou
