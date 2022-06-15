@@ -17,7 +17,7 @@ services:
     container_name: UNMContainer
     environment:
       NODE_ENV: production
-      SOURCE: ytdlp bilibili kugou
     expose:
       - 8080
     restart: always
+    command: -o ytdlp kuwo kugou
