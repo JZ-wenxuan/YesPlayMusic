@@ -25,6 +25,11 @@ RUN echo $'server { \n\
   } \n\
   \n\
   location /api/ { \n\
+    set $delimeter ""; \n\
+  if ($is_args) { \n\
+    set $delimeter "&"; \n\
+  } \n\
+  set $args "$args${delimeter}proxy=http://unm:8080"; \n\
   proxy_buffer_size 128k; \n\
   proxy_buffers 16 32k; \n\
   proxy_busy_buffers_size 128k; \n\

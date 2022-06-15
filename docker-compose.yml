@@ -3,7 +3,21 @@ services:
     build:
       context: .
     image: yesplaymusic
-    container_name: YesPlayMusic
+    container_name: YPMContainer
     ports:
-      - 80:80
+      - 12321:80
+    restart: always
+    environment:
+      NODE_TLS_REJECT_UNAUTHORIZED: 0
+    links:
+      - UnblockNeteaseMusic:unm
+
+  UnblockNeteaseMusic:
+    image: pan93412/unblock-netease-music-enhanced
+    container_name: UNMContainer
+    environment:
+      NODE_ENV: production
+      SOURCE: ytdlp bilibili kugou
+    expose:
+      - 8080
     restart: always
