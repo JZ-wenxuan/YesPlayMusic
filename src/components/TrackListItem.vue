@@ -3,7 +3,7 @@
     class="track"
     :class="trackClass"
     :style="trackStyle"
-    :title="showUnavailableSongInGreyStyle ? track.reason : ''"
+    :title="track.reason"
     @mouseover="hover = true"
     @mouseleave="hover = false"
   >

@@ -241,17 +241,10 @@
       </div>
 
       <section v-if="isElectron" class="unm-configuration">
-        <h3>UnblockNeteaseMusic</h3>
+        <h3>Youtube Music</h3>
         <div class="item">
           <div class="left">
-            <div class="title"
-              >{{ $t('settings.unm.enable') }}
-              <a
-                href="https://github.com/UnblockNeteaseMusic/server"
-                target="blank"
-                >UnblockNeteaseMusic</a
-              ></div
-            >
+            <div class="title">Use YouTube Music</div>
           </div>
           <div class="right">
             <div class="toggle">
@@ -265,7 +258,32 @@
             </div>
           </div>
         </div>
+        <div class="item">
+          <div class="left">
+            <div class="title">YouTube Music Query Format</div>
+          </div>
+          <div class="right">
+            <input
+              v-model="unmQueryFormat"
+              class="text-input margin-right-0"
+              placeholder="$song, $artists, $album"
+            />
+          </div>
+        </div>
+        <div class="item">
+          <div class="left">
+            <div class="title">Song Duration Tolerance</div>
+          </div>
+          <div class="right">
+            <input
+              v-model="unmDurationTolerance"
+              class="text-input margin-right-0"
+              placeholder=""
+            />
+          </div>
+        </div>
 
+        <!-- 
         <div class="item">
           <div class="left">
             <div class="title">
@@ -406,6 +424,7 @@
             />
           </div>
         </div>
+        -->
       </section>
 
       <h3>第三方</h3>
@@ -1084,6 +1103,36 @@ export default {
         this.$store.commit('updateSettings', {
           key: 'proxyConfig',
           value: config,
+        });
+      },
+    },
+    unmQueryFormat: {
+      /**
+       * @returns {string}
+       */
+      get() {
+        return this.settings.unmQueryFormat || '$song $artist $album';
+      },
+      /** @param {string?} value */
+      set(value) {
+        this.$store.commit('updateSettings', {
+          key: 'unmQueryFormat',
+          value: value.length && value,
+        });
+      },
+    },
+    unmDurationTolerance: {
+      /**
+       * @returns {string}
+       */
+      get() {
+        return this.settings.unmDurationTolerance || '1';
+      },
+      /** @param {string?} value */
+      set(value) {
+        this.$store.commit('updateSettings', {
+          key: 'unmDurationTolerance',
+          value: value.length && value,
         });
       },
     },
