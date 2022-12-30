@@ -240,7 +240,7 @@
         </div>
       </div>
 
-      <section v-if="isElectron" class="unm-configuration">
+      <section class="unm-configuration">
         <h3>Youtube Music</h3>
         <div class="item">
           <div class="left">

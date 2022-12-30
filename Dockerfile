@@ -8,7 +8,6 @@ COPY . .
 RUN yarn build
 
 FROM nginx:1.20.2-alpine as app
-COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=build /app/package.json /usr/local/lib/
 
@@ -18,4 +17,11 @@ RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/v3.14/m
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
-CMD nginx ; exec npx NeteaseCloudMusicApi
+RUN apk add g++ python3 py3-pip python3-dev
+RUN pip install ytmurl
+
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+COPY ytmservice.py /etc/ytmservice/app.py
+
+CMD nginx & exec npx NeteaseCloudMusicApi & python3 /etc/ytmservice/app.py

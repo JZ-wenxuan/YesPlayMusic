@@ -408,10 +408,7 @@ export default class {
   async _getAudioSourceFromUnblockMusic(track) {
     console.debug(`[debug][Player.js] _getAudioSourceFromUnblockMusic`);
 
-    if (
-      process.env.IS_ELECTRON !== true ||
-      store.state.settings.enableUnblockNeteaseMusic === false
-    ) {
+    if (store.state.settings.enableUnblockNeteaseMusic === false) {
       return null;
     }
 
@@ -425,26 +422,35 @@ export default class {
     const duration_tolerance = Number(
       store.state.settings.unmDurationTolerance
     );
-    const duration = [
-      Math.ceil(track.dt / 1000 - duration_tolerance),
-      Math.floor(track.dt / 1000 + duration_tolerance),
-    ];
-
+    const dmin = Math.ceil(track.dt / 1000 - duration_tolerance);
+    const dmax = Math.floor(track.dt / 1000 + duration_tolerance);
+    let retrieveUrl;
     try {
-      // const retrieveUrl = await ipcRenderer.invoke('unblock-music', track);
-      const retrieveUrl = await new Promise((resolve, reject) => {
-        execFile(
-          'ytmurl',
-          ['-d', ...duration, query],
-          (error, stdout, stderr) => {
-            if (error || stderr) {
-              console.log(error, stderr);
-              reject(stderr);
+      if (process.env.IS_ELECTRON) {
+        retrieveUrl = await new Promise((resolve, reject) => {
+          execFile(
+            'ytmurl',
+            ['-d', dmin, dmax, query],
+            (error, stdout, stderr) => {
+              if (error || stderr) {
+                console.log(error, stderr);
+                reject(stderr);
+              }
+              resolve(stdout);
             }
-            resolve(stdout);
-          }
+          );
+        });
+      } else {
+        const response = await fetch(
+          '/ytmurl/song?' +
+            new URLSearchParams({
+              q: query,
+              dmin: dmin,
+              dmax: dmax,
+            })
         );
-      });
+        retrieveUrl = await response.text();
+      }
       console.debug(
         `[debug][Player.js] Replaced "${query}" with Youtube Music: ${retrieveUrl}`
       );
