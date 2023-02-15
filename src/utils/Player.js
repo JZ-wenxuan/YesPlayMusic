@@ -11,9 +11,9 @@ import { isCreateMpris, isCreateTray } from '@/utils/platform';
 import { Howl, Howler } from 'howler';
 import shuffle from 'lodash/shuffle';
 import { execFile } from 'child_process';
-import fixPath from 'fix-path';
+// import fixPath from 'fix-path';
 
-fixPath();
+// fixPath();
 
 const PLAY_PAUSE_FADE_DURATION = 200;
 
