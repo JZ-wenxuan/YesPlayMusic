@@ -442,7 +442,7 @@ export default class {
         });
       } else {
         const response = await fetch(
-          '/ytmurl/song?' +
+          '/api/ytmurl?' +
             new URLSearchParams({
               q: query,
               dmin: dmin,
