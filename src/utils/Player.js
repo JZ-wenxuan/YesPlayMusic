@@ -457,6 +457,7 @@ export default class {
     if (autoplay && this._currentTrack.name) {
       this._scrobble(this.currentTrack, this._howler?.seek());
     }
+    navigator.mediaSession.playbackState = 'none';
     return getTrackDetail(id).then(data => {
       let track = data.songs[0];
       this._currentTrack = track;
@@ -642,6 +643,7 @@ export default class {
     if (trackID === undefined) {
       this._howler?.stop();
       this._setPlaying(false);
+      navigator.mediaSession.playbackState = 'none';
       return false;
     }
     this.current = index;
@@ -716,6 +718,7 @@ export default class {
     this._howler?.once('fade', () => {
       this._howler?.pause();
       this._setPlaying(false);
+      navigator.mediaSession.playbackState = 'paused';
       setTitle(null);
       this._pauseDiscordPresence(this._currentTrack);
     });
@@ -729,6 +732,7 @@ export default class {
       this._howler?.fade(0, this.volume, PLAY_PAUSE_FADE_DURATION);
 
       this._setPlaying(true);
+      navigator.mediaSession.playbackState = 'playing';
       if (this._currentTrack.name) {
         setTitle(this._currentTrack);
       }
