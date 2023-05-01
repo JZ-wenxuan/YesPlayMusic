@@ -449,6 +449,9 @@ export default class {
               dmax: dmax,
             })
         );
+        if (response.status != 200) {
+          throw Error(`Got response.status = ${response.status}`);
+        }
         retrieveUrl = await response.text();
       }
       console.debug(
