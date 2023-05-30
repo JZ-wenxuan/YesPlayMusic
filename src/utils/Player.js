@@ -547,12 +547,12 @@ export default class {
       artwork: [
         {
           src: track.al.picUrl + '?param=224y224',
-          type: 'image/jpg',
+          type: 'image/jpeg',
           sizes: '224x224',
         },
         {
           src: track.al.picUrl + '?param=512y512',
-          type: 'image/jpg',
+          type: 'image/jpeg',
           sizes: '512x512',
         },
       ],
