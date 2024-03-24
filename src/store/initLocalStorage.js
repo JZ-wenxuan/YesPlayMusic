@@ -37,6 +37,8 @@ let localStorage = {
       port: null,
     },
     shortcuts: shortcuts,
+    unmQueryFormat: '$song $artists',
+    unmDurationTolerance: '1.5',
   },
   data: {
     user: {},

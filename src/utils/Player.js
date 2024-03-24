@@ -414,70 +414,50 @@ export default class {
   async _getAudioSourceFromUnblockMusic(track) {
     console.debug(`[debug][Player.js] _getAudioSourceFromUnblockMusic`);
 
-    if (
-      process.env.IS_ELECTRON !== true ||
-      store.state.settings.enableUnblockNeteaseMusic === false
-    ) {
+    if (store.state.settings.enableUnblockNeteaseMusic === false) {
       return null;
     }
 
-    /**
-     *
-     * @param {string=} searchMode
-     * @returns {import("@unblockneteasemusic/rust-napi").SearchMode}
-     */
-    const determineSearchMode = searchMode => {
-      /**
-       * FastFirst = 0
-       * OrderFirst = 1
-       */
-      switch (searchMode) {
-        case 'fast-first':
-          return 0;
-        case 'order-first':
-          return 1;
-        default:
-          return 0;
-      }
-    };
-
-    const retrieveSongInfo = await ipcRenderer.invoke(
-      'unblock-music',
-      store.state.settings.unmSource,
-      track,
-      {
-        enableFlac: store.state.settings.unmEnableFlac || null,
-        proxyUri: store.state.settings.unmProxyUri || null,
-        searchMode: determineSearchMode(store.state.settings.unmSearchMode),
-        config: {
-          'joox:cookie': store.state.settings.unmJooxCookie || null,
-          'qq:cookie': store.state.settings.unmQQCookie || null,
-          'ytdl:exe': store.state.settings.unmYtDlExe || null,
-        },
-      }
+    const song = `${track.name || ''}`;
+    const artists = track.ar ? track.ar.map(a => a.name).join(' ') : '';
+    const album = `${track.al.name || ''}`;
+    const query = store.state.settings.unmQueryFormat
+      .replace('$song', song)
+      .replace('$artists', artists)
+      .replace('$album', album);
+    const duration_tolerance = Number(
+      store.state.settings.unmDurationTolerance
     );
-
-    if (store.state.settings.automaticallyCacheSongs && retrieveSongInfo?.url) {
-      // 对于来自 bilibili 的音源
-      // retrieveSongInfo.url 是音频数据的base64编码
-      // 其他音源为实际url
-      const url =
-        retrieveSongInfo.source === 'bilibili'
-          ? `data:application/octet-stream;base64,${retrieveSongInfo.url}`
-          : retrieveSongInfo.url;
-      cacheTrackSource(track, url, 128000, `unm:${retrieveSongInfo.source}`);
-    }
-
-    if (!retrieveSongInfo) {
+    const dmin = Math.ceil(track.dt / 1000 - duration_tolerance);
+    const dmax = Math.floor(track.dt / 1000 + duration_tolerance);
+    let retrieveUrl;
+    try {
+      const response = await fetch(
+        '/api/ytmurl?' +
+          new URLSearchParams({
+            q: query,
+            dmin: dmin,
+            dmax: dmax,
+          })
+      );
+      if (response.status != 200) {
+        throw Error(`Got response.status = ${response.status}`);
+      }
+      retrieveUrl = await response.text();
+      console.debug(
+        `[debug][Player.js] Replaced "${query}" with Youtube Music: ${retrieveUrl}`
+      );
+      const source = retrieveUrl.replace(/^http:/, 'https:');
+      if (store.state.settings.automaticallyCacheSongs) {
+        cacheTrackSource(track, source, 'bestaudio', 'youtubemusic');
+      }
+      return retrieveUrl;
+    } catch (err) {
+      console.error(
+        `[error][Player.js] Failed to replace "${query}" with Youtube Music; ${err}`
+      );
       return null;
     }
-
-    if (retrieveSongInfo.source !== 'bilibili') {
-      return retrieveSongInfo.url;
-    }
-
-    const buffer = base642Buffer(retrieveSongInfo.url);
-    return this._getAudioSourceBlobURL(buffer);
   }
   _getAudioSource(track) {
     return this._getAudioSourceFromCache(String(track.id))
@@ -496,6 +476,7 @@ export default class {
     if (autoplay && this._currentTrack.name) {
       this._scrobble(this.currentTrack, this._howler?.seek());
     }
+    // navigator.mediaSession.playbackState = 'none';
     return getTrackDetail(id).then(data => {
       const track = data.songs[0];
       this._currentTrack = track;
@@ -728,6 +709,7 @@ export default class {
     if (trackID === undefined) {
       this._howler?.stop();
       this._setPlaying(false);
+      // navigator.mediaSession.playbackState = 'none';
       return false;
     }
     let next = index;
@@ -811,6 +793,7 @@ export default class {
     this._howler?.once('fade', () => {
       this._howler?.pause();
       this._setPlaying(false);
+      // navigator.mediaSession.playbackState = 'paused';
       setTitle(null);
       this._pauseDiscordPresence(this._currentTrack);
     });
@@ -827,6 +810,7 @@ export default class {
       // 避免因"忘记设置"导致在播放时播放器不显示的Bug
       this._enabled = true;
       this._setPlaying(true);
+      // navigator.mediaSession.playbackState = 'playing';
       if (this._currentTrack.name) {
         setTitle(this._currentTrack);
       }

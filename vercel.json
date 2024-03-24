@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/ytmurl",
+      "destination": "https://ytmurl-server-jz-wenxuan.vercel.app/api/ytmurl"
+    },
+    {
+      "source": "/api/:match*",
+      "destination": "https://netease-cloud-music-api-jz-wenxuan.vercel.app/:match*"
+    }
+  ]
+}
