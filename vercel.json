@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/ytmurl",
-      "destination": "https://ytmurl-server-jz-wenxuan.vercel.app/api/ytmurl"
+      "destination": "https://ytmurl-server.vercel.app/api/ytmurl"
     },
     {
       "source": "/api/:match*",

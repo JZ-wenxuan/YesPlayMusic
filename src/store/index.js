@@ -56,7 +56,7 @@ player = new Proxy(player, {
   set(target, prop, val) {
     // console.log({ prop, val });
     target[prop] = val;
-    if (prop === '_howler') return true;
+    if (prop === 'audio') return true;
     target.saveSelfToLocalStorage();
     target.sendSelfToIpcMain();
     return true;

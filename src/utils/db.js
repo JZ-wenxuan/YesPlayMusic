@@ -51,7 +51,6 @@ async function deleteExcessCache() {
 }
 
 export function cacheTrackSource(trackInfo, url, bitRate, from = 'netease') {
-  if (!process.env.IS_ELECTRON) return;
   const name = trackInfo.name;
   const artist =
     (trackInfo.ar && trackInfo.ar[0]?.name) ||
@@ -64,25 +63,43 @@ export function cacheTrackSource(trackInfo, url, bitRate, from = 'netease') {
   axios.get(`${cover}?param=512y512`);
   axios.get(`${cover}?param=224y224`);
   axios.get(`${cover}?param=1024y1024`);
-  return axios
-    .get(url, {
-      responseType: 'arraybuffer',
-    })
-    .then(response => {
-      db.trackSources.put({
-        id: trackInfo.id,
-        source: response.data,
-        bitRate,
-        from,
-        name,
-        artist,
-        createTime: new Date().getTime(),
+  if (process.env.IS_ELECTRON) {
+    return axios
+      .get(url, {
+        responseType: 'arraybuffer',
+      })
+      .then(response => {
+        db.trackSources.put({
+          id: trackInfo.id,
+          source: response.data,
+          bitRate,
+          from,
+          name,
+          artist,
+          createTime: new Date().getTime(),
+        });
+        console.debug(`[debug][db.js] cached track 👉 ${name} by ${artist}`);
+        tracksCacheBytes += response.data.byteLength;
+        deleteExcessCache();
+        return { trackID: trackInfo.id, source: response.data, bitRate };
       });
-      console.debug(`[debug][db.js] cached track 👉 ${name} by ${artist}`);
-      tracksCacheBytes += response.data.byteLength;
-      deleteExcessCache();
-      return { trackID: trackInfo.id, source: response.data, bitRate };
+  } else {
+    db.trackSources.put({
+      id: trackInfo.id,
+      url: url,
+      bitRate,
+      from,
+      name,
+      artist,
+      createTime: new Date().getTime(),
     });
+    console.debug(`[debug][db.js] cached track info 👉 ${name} by ${artist}`);
+  }
+}
+
+export function decacheTrackSource(trackId) {
+  db.trackSources.delete(trackId);
+  console.debug(`[debug][db.js] decached track info 👉 ${trackId}`);
 }
 
 export function getTrackSource(id) {

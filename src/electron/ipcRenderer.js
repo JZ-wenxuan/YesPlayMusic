@@ -89,6 +89,6 @@ export function ipcRenderer(vueInstance) {
   });
 
   ipcRenderer.on('setPosition', (event, position) => {
-    player._howler.seek(position);
+    player.seek(position);
   });
 }
