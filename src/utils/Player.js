@@ -53,6 +53,7 @@ const excludeSaveKeys = [
 ];
 
 let audio;
+let cacheAudio;
 const AUTOPLAY_DUMMY =
   'https://freetestdata.com/wp-content/uploads/2021/09/Free_Test_Data_100KB_MP3.mp3';
 
