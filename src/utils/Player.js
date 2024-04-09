@@ -228,6 +228,7 @@ export default class {
     this._loadSelfFromLocalStorage();
 
     audio = document.createElement('audio');
+    cacheAudio = document.createElement('audio');
     // silence...
     audio.src = AUTOPLAY_DUMMY;
 
@@ -243,6 +244,7 @@ export default class {
 
     this._interacted = false;
     this._canAutoplay = false;
+    this._retriedTimes = 0;
 
     if (this._enabled) {
       // 恢复当前播放歌曲
@@ -291,10 +293,10 @@ export default class {
         (this.playing &&
           this._progress === audio.currentTime &&
           audio.currentTime > 0 &&
-          audio.currentTime >= this.currentTrackDuration - 10) ||
+          audio.currentTime >= this.currentTrack.dt - 2) ||
         (this.playing &&
           audio.currentTime > 0 &&
-          audio.currentTime >= this.currentTrackDuration)
+          audio.currentTime >= this.currentTrack.dt + 2)
       ) {
         this._setState(PLAYER_STATE.LOADING);
         this._nextTrackCallback();
@@ -573,7 +575,9 @@ export default class {
     if (this._personalFMTrack.id === nextTrackID) return;
     getTrackDetail(nextTrackID).then(data => {
       let track = data.songs[0];
-      this._getAudioSource(track);
+      this._getAudioSource(track).then(source => {
+        cacheAudio.src = source;
+      });
     });
   }
   _loadSelfFromLocalStorage() {
@@ -843,8 +847,13 @@ export default class {
         })
         .catch(async () => {
           this._setState(PLAYER_STATE.LOADING);
-          decacheTrackSource(this.currentTrackID);
-          const done = await this._replaceCurrentTrackAudio(this.currentTrack);
+          let done = false;
+          if (this._retriedTimes === 0) {
+            decacheTrackSource(this.currentTrackID);
+            this._retriedTimes += 1;
+            done = await this._replaceCurrentTrackAudio(this.currentTrack);
+          }
+          this._retriedTimes = 0;
           if (!done) {
             store.dispatch('showToast', `Error ${audio.error.code}`);
             console.error(`Failed to play: Error ${audio.error}`);
