@@ -230,6 +230,7 @@ export default class {
 
     audio = document.createElement('audio');
     cacheAudio = document.createElement('audio');
+    cacheAudio.volume = 0;
     // silence...
     audio.src = AUTOPLAY_DUMMY;
 
@@ -578,6 +579,7 @@ export default class {
       let track = data.songs[0];
       this._getAudioSource(track).then(source => {
         cacheAudio.src = source;
+        cacheAudio.play();
       });
     });
   }
