@@ -1041,6 +1041,7 @@ export default class {
     if (!this._interacted) {
       this._interacted = true;
       audio.volume = 0;
+      audio.source = AUTOPLAY_DUMMY;
       audio
         .play()
         .then(() => {
