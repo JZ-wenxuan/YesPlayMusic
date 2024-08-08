@@ -383,30 +383,50 @@ export default class {
 
     return source;
   }
-  _getAudioSourceFromCache(id) {
-    return getTrackSource(id).then(t => {
-      if (!t) return null;
-      return this._getAudioSourceBlobURL(t.source);
-    });
+  async _getAudioSourceFromCache(id) {
+    let t = await getTrackSource(id);
+    if (!t) return null;
+    return this._getAudioSourceBlobURL(t.source);
   }
-  _getAudioSourceFromNetease(track) {
+  async _getAudioSourceFromNetease(track) {
     if (isAccountLoggedIn()) {
-      return getMP3(track.id).then(result => {
-        if (!result.data[0]) return null;
-        if (!result.data[0].url) return null;
-        if (result.data[0].freeTrialInfo !== null) return null; // 跳过只能试听的歌曲
-        const source = result.data[0].url.replace(/^http:/, 'https:');
-        if (store.state.settings.automaticallyCacheSongs) {
-          cacheTrackSource(track, source, result.data[0].br);
-        }
-        return source;
-      });
+      let result = await getMP3(track.id);
+      if (!result.data[0]) return null;
+      if (!result.data[0].url) return null;
+      if (result.data[0].freeTrialInfo !== null) return null;
+      const source = result.data[0].url.replace(/^http:/, 'https:');
+      if (store.state.settings.automaticallyCacheSongs) {
+        cacheTrackSource(track, source, result.data[0].br);
+      }
+      return source;
     } else {
       return null; // let's just query unblock if not logged in
     }
   }
-  async _getAudioSourceFromUnblockMusic(track) {
-    console.debug(`[debug][Player.js] _getAudioSourceFromUnblockMusic`);
+  async _getAudioSourceFromGDStudio(track) {
+    console.debug(`[debug][Player.js] _getAudioSourceFromGDStudio`);
+
+    if (store.state.settings.enableUnblockNeteaseMusic === false) {
+      return null;
+    }
+
+    // Credit: This API is provided by GD studio (music.gdstudio.xyz).
+    try {
+      const url =
+        '/api/gdstudio?types=url&source=netease&id=' + track.id + '&br=320';
+      const response = await fetch(url);
+      const jsonBody = await response.json();
+      if (jsonBody && typeof jsonBody === 'object' && !('url' in jsonBody)) {
+        return null;
+      }
+      return jsonBody.br > 0 ? jsonBody.url : null;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  }
+  async _getAudioSourceFromYouTubeMusic(track) {
+    console.debug(`[debug][Player.js] _getAudioSourceFromYouTubeMusic`);
 
     if (store.state.settings.enableUnblockNeteaseMusic === false) {
       return null;
@@ -438,29 +458,28 @@ export default class {
         throw Error(`Got response.status = ${response.status}`);
       }
       retrieveUrl = await response.text();
-      console.debug(
-        `[debug][Player.js] Replaced "${query}" with Youtube Music: ${retrieveUrl}`
-      );
       const source = retrieveUrl.replace(/^http:/, 'https:');
       if (store.state.settings.automaticallyCacheSongs) {
         cacheTrackSource(track, source, 'bestaudio', 'youtubemusic');
       }
       return retrieveUrl;
     } catch (err) {
-      console.error(
-        `[error][Player.js] Failed to replace "${query}" with Youtube Music; ${err}`
-      );
+      console.error(err);
       return null;
     }
   }
-  _getAudioSource(track) {
-    return this._getAudioSourceFromCache(String(track.id))
-      .then(source => {
-        return source ?? this._getAudioSourceFromNetease(track);
-      })
-      .then(source => {
-        return source ?? this._getAudioSourceFromUnblockMusic(track);
-      });
+  async _getAudioSource(track) {
+    let source = await this._getAudioSourceFromCache(String(track.id));
+    if (!source) {
+      source = await this._getAudioSourceFromNetease(track);
+    }
+    if (!source) {
+      source = await this._getAudioSourceFromGDStudio(track);
+    }
+    if (!source) {
+      source = await this._getAudioSourceFromYouTubeMusic(track);
+    }
+    return source;
   }
   async _replaceCurrentTrack(
     id,
@@ -505,48 +524,47 @@ export default class {
       return true;
     }
     console.debug(`Getting track source for ${track.name}`);
-    return this._getAudioSource(track).then(source => {
-      if (source) {
-        let replaced = false;
-        if (track.id === this.currentTrackID) {
-          this._currentTrackSource = source;
-          audio.src = source;
-          console.log(audio);
-          this._state = PLAYER_STATE.IN_PROGRESS;
-          if (autoplay || this.playing) {
-            this.play();
-          }
-          replaced = true;
+    let source = await this._getAudioSource(track);
+    if (source) {
+      let replaced = false;
+      if (track.id === this.currentTrackID) {
+        this._currentTrackSource = source;
+        audio.src = source;
+        console.log(audio);
+        this._state = PLAYER_STATE.IN_PROGRESS;
+        if (autoplay || this.playing) {
+          this.play();
         }
-        this._cacheNextTrack();
-        return replaced;
-      } else {
-        store.dispatch('showToast', `无法播放 ${track.name}`);
-        switch (ifUnplayableThen) {
-          case UNPLAYABLE_CONDITION.PLAY_NEXT_TRACK:
-            if (this.playing) {
-              this.playNextTrack(false);
-            } else {
-              this._state = PLAYER_STATE.IN_PROGRESS;
-            }
-            break;
-          case UNPLAYABLE_CONDITION.PLAY_PREV_TRACK:
-            if (this.playing) {
-              this.playPrevTrack(false);
-            } else {
-              this._state = PLAYER_STATE.IN_PROGRESS;
-            }
-            break;
-          default:
-            store.dispatch(
-              'showToast',
-              `undefined Unplayable condition: ${ifUnplayableThen}`
-            );
-            break;
-        }
-        return false;
+        replaced = true;
       }
-    });
+      this._cacheNextTrack();
+      return replaced;
+    } else {
+      store.dispatch('showToast', `无法播放 ${track.name}`);
+      switch (ifUnplayableThen) {
+        case UNPLAYABLE_CONDITION.PLAY_NEXT_TRACK:
+          if (this.playing) {
+            this.playNextTrack(false);
+          } else {
+            this._state = PLAYER_STATE.IN_PROGRESS;
+          }
+          break;
+        case UNPLAYABLE_CONDITION.PLAY_PREV_TRACK:
+          if (this.playing) {
+            this.playPrevTrack(false);
+          } else {
+            this._state = PLAYER_STATE.IN_PROGRESS;
+          }
+          break;
+        default:
+          store.dispatch(
+            'showToast',
+            `undefined Unplayable condition: ${ifUnplayableThen}`
+          );
+          break;
+      }
+      return false;
+    }
   }
   _cacheNextTrack() {
     let nextTrackID = this._isPersonalFM
