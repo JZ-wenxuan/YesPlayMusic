@@ -11,8 +11,15 @@ module.exports = {
     disableHostCheck: true,
     port: process.env.DEV_SERVER_PORT || 8080,
     proxy: {
+      '^/api/ytmurl': {
+        target: 'https://ytmurl-server.vercel.app',
+        changeOrigin: true,
+        pathRewrite: {
+          '^/api/ytmurl': '/api/ytmurl',
+        },
+      },
       '^/api': {
-        target: 'http://localhost:3000',
+        target: 'https://netease-cloud-music-api-jz-wenxuan.vercel.app',
         changeOrigin: true,
         pathRewrite: {
           '^/api': '/',

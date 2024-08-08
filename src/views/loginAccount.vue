@@ -130,7 +130,7 @@ export default {
   data() {
     return {
       processing: false,
-      mode: 'qrCode',
+      mode: 'email',
       countryCode: '+86',
       phoneNumber: '',
       email: '',

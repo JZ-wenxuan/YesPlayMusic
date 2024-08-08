@@ -81,7 +81,8 @@ export default {
       this.player.playPersonalFM();
     },
     next() {
-      this.player.playNextFMTrack();
+      this.player._isPersonalFM = true;
+      this.player.playNextTrack();
     },
     goToAlbum() {
       if (this.track.album.id === 0) return;

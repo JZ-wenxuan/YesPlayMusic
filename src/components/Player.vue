@@ -8,6 +8,7 @@
       }"
       @click.stop
     >
+      <div v-if="player.loading" class="progress-bar-loader"></div>
       <vue-slider
         v-model="player.progress"
         :min="0"
@@ -212,9 +213,7 @@ export default {
       return this.player.playing;
     },
     audioSource() {
-      return this.player._howler?._src.includes('kuwo.cn')
-        ? '音源来自酷我音乐'
-        : '';
+      return '';
     },
   },
   methods: {
@@ -227,11 +226,7 @@ export default {
       this.player.playOrPause();
     },
     playNextTrack() {
-      if (this.player.isPersonalFM) {
-        this.player.playNextFMTrack();
-      } else {
-        this.player.playNextTrack();
-      }
+      this.player.playNextTrack();
     },
     goToNextTracksPage() {
       if (this.player.isPersonalFM) return;
@@ -300,6 +295,41 @@ export default {
   margin-top: -6px;
   margin-bottom: -6px;
   width: 100%;
+}
+
+.progress-bar-loader {
+  position: absolute;
+  top: 0px;
+  right: 100%;
+  height: 2px;
+  left: 0;
+  background: var(--color-primary);
+  width: 0;
+  z-index: 1;
+  animation: borealisBar 2s linear infinite;
+}
+
+@keyframes borealisBar {
+  0% {
+    left: 0%;
+    right: 100%;
+    width: 0%;
+  }
+  10% {
+    left: 0%;
+    right: 75%;
+    width: 25%;
+  }
+  90% {
+    right: 0%;
+    left: 75%;
+    width: 25%;
+  }
+  100% {
+    left: 100%;
+    right: 0%;
+    width: 0%;
+  }
 }
 
 .controls {
