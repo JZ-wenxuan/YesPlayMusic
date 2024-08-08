@@ -391,6 +391,7 @@ export default class {
   async _getAudioSourceFromNetease(track) {
     if (isAccountLoggedIn()) {
       let result = await getMP3(track.id);
+      if (!result) return null;
       if (!result.data[0]) return null;
       if (!result.data[0].url) return null;
       if (result.data[0].freeTrialInfo !== null) return null;
@@ -421,7 +422,7 @@ export default class {
       }
       return jsonBody.br > 0 ? jsonBody.url : null;
     } catch (error) {
-      console.error(error);
+      console.debug(error);
       return null;
     }
   }
@@ -464,22 +465,40 @@ export default class {
       }
       return retrieveUrl;
     } catch (err) {
-      console.error(err);
+      console.debug(err);
       return null;
     }
   }
   async _getAudioSource(track) {
-    let source = await this._getAudioSourceFromCache(String(track.id));
-    if (!source) {
+    let source;
+    try {
+      source = await this._getAudioSourceFromCache(String(track.id));
+      if (source) return source;
+    } catch (error) {
+      console.error(error);
+    }
+
+    try {
       source = await this._getAudioSourceFromNetease(track);
+      if (source) return source;
+    } catch (error) {
+      console.error(error);
     }
-    if (!source) {
+
+    try {
       source = await this._getAudioSourceFromGDStudio(track);
+      if (source) return source;
+    } catch (error) {
+      console.error(error);
     }
-    if (!source) {
+
+    try {
       source = await this._getAudioSourceFromYouTubeMusic(track);
+      if (source) return source;
+    } catch (error) {
+      console.error(error);
     }
-    return source;
+    return null;
   }
   async _replaceCurrentTrack(
     id,
