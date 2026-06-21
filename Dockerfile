@@ -1,28 +1,39 @@
-FROM node:16.13.1-alpine AS build
+# =============================================================================
+# Build YesPlayMusic frontend
+# =============================================================================
+FROM node:16-alpine AS build
+
 ENV VUE_APP_NETEASE_API_URL=/api
+
+RUN apk add --no-cache python3 make g++ git
+
 WORKDIR /app
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories &&\
-	apk add --no-cache python3 make g++ git
 COPY package.json yarn.lock ./
-RUN yarn config set electron_mirror https://npmmirror.com/mirrors/electron/ && \
-    yarn config set registry https://registry.npmmirror.com && \
-    sed -i 's/registry.yarnpkg.com/registry.npmmirror.com/g' yarn.lock && \
-    sed -i 's/registry.npmjs.org/registry.npmmirror.com/g' yarn.lock && \
-    yarn install
+RUN yarn install --frozen-lockfile
 COPY . .
 RUN yarn build
 
-FROM nginx:1.20.2-alpine AS app
+# =============================================================================
+# Runtime — nginx + NetEase API + ytmurl
+# =============================================================================
+FROM node:16-alpine
 
-COPY --from=build /app/package.json /usr/local/lib/
+ENV PYTHONUNBUFFERED=1
 
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories \
-  && apk add --no-cache libuv nodejs npm \
-  && npm config set registry https://registry.npmmirror.com \
-  && npm i -g $(awk -F \" '{if($2=="@neteaseapireborn/api@latest") print $2"@"$4}' /usr/local/lib/package.json) \
-  && rm -f /usr/local/lib/package.json
+COPY docker/ytmurl/requirements.txt /opt/ytmurl/requirements.txt
+COPY package.json /tmp/package.json
 
-COPY --from=build /app/docker/nginx.conf.example /etc/nginx/conf.d/default.conf
+RUN apk add --no-cache nginx python3 py3-pip \
+  && pip3 install --no-cache-dir -r /opt/ytmurl/requirements.txt \
+  && npm install -g "@neteaseapireborn/api@$(node -p "require('/tmp/package.json').dependencies['@neteaseapireborn/api'].replace(/^\^/, '')")" \
+  && rm /tmp/package.json
+
+COPY docker/ytmurl/ /opt/ytmurl/
+COPY docker/nginx.conf.example /etc/nginx/http.d/default.conf
+COPY docker/start.sh /usr/local/bin/start.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 
-CMD ["sh", "-c", "nginx && exec npx @neteaseapireborn/api@latest"]
+RUN chmod +x /usr/local/bin/start.sh
+
+EXPOSE 80
+CMD ["/usr/local/bin/start.sh"]

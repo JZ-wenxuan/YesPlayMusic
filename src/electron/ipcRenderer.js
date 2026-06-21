@@ -36,11 +36,7 @@ export function ipcRenderer(vueInstance) {
   });
 
   ipcRenderer.on('next', () => {
-    if (player.isPersonalFM) {
-      player.playNextFMTrack();
-    } else {
-      player.playNextTrack();
-    }
+    player.playNextTrack();
   });
 
   ipcRenderer.on('previous', () => {
@@ -89,6 +85,6 @@ export function ipcRenderer(vueInstance) {
   });
 
   ipcRenderer.on('setPosition', (event, position) => {
-    player._howler.seek(position);
+    player.seek(position);
   });
 }

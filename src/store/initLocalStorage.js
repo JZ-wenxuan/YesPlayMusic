@@ -41,6 +41,8 @@ let localStorage = {
     enableRealIP: false,
     realIP: null,
     shortcuts: shortcuts,
+    unmQueryFormat: '$song $artists',
+    unmDurationTolerance: '3',
   },
   data: {
     user: {},
