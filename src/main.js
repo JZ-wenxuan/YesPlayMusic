@@ -6,6 +6,7 @@ import store from './store';
 import i18n from '@/locale';
 import '@/assets/icons';
 import '@/utils/filters';
+import { initImageRetry } from '@/utils/imageRetry';
 import './registerServiceWorker';
 import { dailyTask } from '@/utils/common';
 import '@/assets/css/global.scss';
@@ -38,6 +39,7 @@ Vue.use(
 Vue.config.productionTip = false;
 
 NProgress.configure({ showSpinner: false, trickleSpeed: 100 });
+initImageRetry();
 dailyTask();
 
 new Vue({
