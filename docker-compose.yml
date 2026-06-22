@@ -2,15 +2,8 @@ services:
   YesPlayMusic:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     image: yesplaymusic
     container_name: YesPlayMusic
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
     ports:
-      - 19980:80
-    # restart: always
-    # environment:
-    #   - NODE_TLS_REJECT_UNAUTHORIZED=0
-
+      - 127.0.0.1:1980:80
