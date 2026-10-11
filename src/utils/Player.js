@@ -47,7 +47,6 @@ const excludeSaveKeys = [
   '_personalFMLoading',
   '_personalFMNextLoading',
   '_trackSeqNum',
-  '_cacheAvailable',
   '_cachedTrackSource',
 ];
 
@@ -67,6 +66,23 @@ function setTitle(track) {
 function setTrayLikeState(isLiked) {
   if (isCreateTray) {
     ipcRenderer?.send('updateTrayLikeState', isLiked);
+  }
+}
+
+async function retry(
+  fn,
+  { retries = 4, baseDelayMs = 500, maxDelayMs = 5000 } = {}
+) {
+  let attempt = 0;
+  while (attempt < retries) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err.noRetry) throw err;
+      const delay = Math.min(baseDelayMs * 2 ** attempt, maxDelayMs);
+      await new Promise(r => setTimeout(r, delay));
+      attempt++;
+    }
   }
 }
 
@@ -237,18 +253,42 @@ export default class {
 
     audio = document.createElement('audio');
     audio.preload = 'auto';
+    audio.volume = this.volume;
     cacheAudio = document.createElement('audio');
     cacheAudio.preload = 'auto';
+    cacheAudio.volume = this.volume;
 
     this._state = PLAYER_STATE.IDLING; // 是否正在播放中
     this._playing = false;
     this._trackSeqNum = 0;
-    this._cacheAvailable = false;
+    this._cachedTrackId = null;
     this._cachedTrackSource = null;
 
     this._audioEndedEventHandler = () => {
       console.debug(`Handling ended event while ${this._state}`);
       this._nextTrackCallback();
+    };
+
+    this._audioWaitingEventHandler = () => {
+      console.debug(`Handling waiting event while ${this._state}`);
+      if (this.playing) {
+        this.play();
+      }
+    };
+
+    this._audioStalledEventHandler = () => {
+      console.debug(`Handling stalled event while ${this._state}`);
+      if (this.playing) {
+        this.play();
+      }
+    };
+
+    this._audioErrorEventHandler = () => {
+      console.debug(`Handling error event while ${this._state}`);
+      store.dispatch('showToast', `Error ${audio.error?.code}`);
+      if (this.playing) {
+        this.playNextTrack();
+      }
     };
 
     if (this._enabled) {
@@ -259,6 +299,7 @@ export default class {
     }
 
     this._setIntervals();
+    this._checkPlayBackHealth();
 
     // 初始化私人FM
     if (
@@ -407,28 +448,6 @@ export default class {
       return null; // let's just query unblock if not logged in
     }
   }
-  async _getAudioSourceFromGDStudio(track) {
-    console.debug(`[debug][Player.js] _getAudioSourceFromGDStudio`);
-
-    if (store.state.settings.enableUnblockNeteaseMusic === false) {
-      return null;
-    }
-
-    // Credit: This API is provided by GD studio (music.gdstudio.xyz).
-    try {
-      const url =
-        '/api/gdstudio?types=url&source=netease&id=' + track.id + '&br=320';
-      const response = await fetch(url);
-      const jsonBody = await response.json();
-      if (jsonBody && typeof jsonBody === 'object' && !('url' in jsonBody)) {
-        return null;
-      }
-      return jsonBody.br > 0 ? jsonBody.url : null;
-    } catch (error) {
-      console.debug(error);
-      return null;
-    }
-  }
   async _getAudioSourceFromYouTubeMusic(track) {
     console.debug(`[debug][Player.js] _getAudioSourceFromYouTubeMusic`);
 
@@ -489,13 +508,6 @@ export default class {
     }
 
     try {
-      source = await this._getAudioSourceFromGDStudio(track);
-      if (source) return source;
-    } catch (error) {
-      console.error(error);
-    }
-
-    try {
       source = await this._getAudioSourceFromYouTubeMusic(track);
       if (source) return source;
     } catch (error) {
@@ -511,18 +523,19 @@ export default class {
     const trackSeqNum = ++this._trackSeqNum;
     audio.pause();
     this._progress = 0;
+    this._previousProgress = 0;
     this._state = PLAYER_STATE.LOADING_NEXT;
     this._enabled = true;
     if (this.playing && this._currentTrack.name) {
       this._scrobble(this.currentTrack, this.progress);
     }
     if (this._isPersonalFM) {
-      id = await this._getNextFMTrack();
+      id = await retry(() => this._getNextFMTrack());
       if (!id) {
         return false;
       }
     }
-    let data = await getTrackDetail(id);
+    let data = await retry(() => getTrackDetail(id));
     // If we started loading a newer track, abort this one
     if (trackSeqNum !== this._trackSeqNum) {
       return false;
@@ -531,12 +544,18 @@ export default class {
     this._currentTrack = track;
     if (this._cachedTrackId === track.id) {
       console.debug(`Swapping with cached track ${track.name}`);
+      audio.removeEventListener('waiting', this._audioWaitingEventHandler);
+      audio.removeEventListener('stalled', this._audioStalledEventHandler);
+      audio.removeEventListener('error', this._audioErrorEventHandler);
       audio.removeEventListener('ended', this._audioEndedEventHandler);
       audio.pause();
       audio.src = null;
       [cacheAudio, audio] = [audio, cacheAudio];
       console.log(audio);
       this._currentTrackSource = this._cachedTrackSource;
+      audio.addEventListener('waiting', this._audioWaitingEventHandler);
+      audio.addEventListener('stalled', this._audioStalledEventHandler);
+      audio.addEventListener('error', this._audioErrorEventHandler);
       audio.addEventListener('ended', this._audioEndedEventHandler);
       this._state = PLAYER_STATE.IN_PROGRESS;
       if (autoplay || this.playing) {
@@ -546,12 +565,13 @@ export default class {
       return true;
     }
     console.debug(`Getting track source for ${track.name}`);
-    let source = await this._getAudioSource(track);
+    let source = await retry(() => this._getAudioSource(track));
     if (source) {
       let replaced = false;
       if (track.id === this.currentTrackID) {
         this._currentTrackSource = source;
         audio.src = source;
+        audio.load();
         console.log(audio);
         this._state = PLAYER_STATE.IN_PROGRESS;
         if (autoplay || this.playing) {
@@ -566,14 +586,14 @@ export default class {
       switch (ifUnplayableThen) {
         case UNPLAYABLE_CONDITION.PLAY_NEXT_TRACK:
           if (this.playing) {
-            this.playNextTrack(false);
+            this.playNextTrack();
           } else {
             this._state = PLAYER_STATE.IN_PROGRESS;
           }
           break;
         case UNPLAYABLE_CONDITION.PLAY_PREV_TRACK:
           if (this.playing) {
-            this.playPrevTrack(false);
+            this.playPrevTrack();
           } else {
             this._state = PLAYER_STATE.IN_PROGRESS;
           }
@@ -588,24 +608,29 @@ export default class {
       return false;
     }
   }
-  _cacheNextTrack() {
+  async _cacheNextTrack() {
     let nextTrackID = this._isPersonalFM
       ? this._personalFMNextTrack?.id ?? 0
       : this._getNextTrack()[0];
     if (!nextTrackID) return;
     if (this._personalFMTrack.id === nextTrackID) return;
-    getTrackDetail(nextTrackID).then(data => {
-      let track = data.songs[0];
-      this._getAudioSource(track).then(source => {
-        cacheAudio.src = source;
-        this._cachedTrackId = nextTrackID;
-        this._cachedTrackSource = source;
-        if (this._cacheAvailable) {
-          cacheAudio.load();
-        }
-        console.debug(`Caching next track: ${track.name}`);
-      });
-    });
+    if (this._cachingTrackId === nextTrackID) return;
+    this._cachingTrackId = nextTrackID;
+
+    const data = await retry(() => getTrackDetail(nextTrackID));
+    if (this._cachingTrackId !== nextTrackID) return;
+
+    let track = data.songs[0];
+    console.debug(`Fetching next track source: ${track.name}`);
+
+    const source = await retry(() => this._getAudioSource(track));
+    if (this._cachingTrackId !== nextTrackID) return;
+
+    cacheAudio.src = source;
+    this._cachedTrackId = nextTrackID;
+    this._cachedTrackSource = source;
+    console.debug(`Caching next track: ${track.name}`);
+    cacheAudio.load();
   }
   _loadSelfFromLocalStorage() {
     const player = JSON.parse(localStorage.getItem('player'));
@@ -722,7 +747,7 @@ export default class {
     if (!this.isPersonalFM && this.repeatMode === 'one') {
       this._replaceCurrentTrack(this.currentTrackID);
     } else {
-      this.playNextTrack(false);
+      this.playNextTrack();
     }
   }
   _loadPersonalFMNextTrack() {
@@ -859,27 +884,33 @@ export default class {
     navigator.mediaSession.playbackState = 'paused';
     this._pauseDiscordPresence(this._currentTrack);
   }
-  play() {
+  async play() {
     this.playing = true;
     if (this._state == PLAYER_STATE.IN_PROGRESS) {
       let trackSeqNum = this._trackSeqNum;
       this._state = PLAYER_STATE.LOADING_CURRENT;
-      audio
-        .play()
-        .then(() => {
-          this._state = PLAYER_STATE.IN_PROGRESS;
-          this._initMediaSession();
-          this._updateMediaSessionMetaData();
-        })
-        .catch(async error => {
-          console.error(error);
-          if (trackSeqNum === this._trackSeqNum && this.playing) {
-            store.dispatch('showToast', `Error ${audio.error?.code}`);
-            this.playNextTrack(false);
+      try {
+        await retry(async () => {
+          if (!this.playing) {
+            const err = new Error('play() retry interrupted by a pause()');
+            err.noRetry = true; // Hack: do not retry play if interrupted by a pause()
+            throw err;
           }
+          await audio.play();
         });
-      // 播放时确保开启player.
-      // 避免因"忘记设置"导致在播放时播放器不显示的Bug
+      } catch (error) {
+        console.error(`[Player.js] audio.play() error: ${error}`);
+        if (error.noRetry) return;
+        if (trackSeqNum === this._trackSeqNum && this.playing) {
+          store.dispatch('showToast', `Error ${audio.error?.code}`);
+          this.playNextTrack();
+        }
+        return;
+      }
+      this._state = PLAYER_STATE.IN_PROGRESS;
+      this._initMediaSession();
+      this._updateMediaSessionMetaData();
+      console.debug(`[Player.js] audio.play() success`);
     }
     this._enabled = true;
     this._playDiscordPresence(this._currentTrack, this.seek());
@@ -907,6 +938,7 @@ export default class {
     if (time !== null && audio.duration) {
       audio.currentTime = Math.max(0, Math.min(time, audio.duration));
       this._progress = audio.currentTime;
+      this._previousProgress = audio.currentTime;
       this._updateMediaSessionPositionState();
       if (this.playing)
         this._playDiscordPresence(this._currentTrack, this.seek(null, false));
@@ -1042,5 +1074,36 @@ export default class {
   }
   removeTrackFromQueue(index) {
     this._playNextList.splice(index, 1);
+  }
+
+  async _checkPlayBackHealth() {
+    this._previousProgress = 0; // Progress at previous health check
+    this._stuckDuration = 0; // Time stuck for
+    for (;;) {
+      await new Promise(r => setTimeout(r, 1000));
+      if (this.playing) {
+        if (this._progress == this._previousProgress) {
+          this._stuckDuration += 1;
+        } else {
+          this._stuckDuration = 0;
+          this._previousProgress = this._progress;
+        }
+        if (this._stuckDuration === 10) {
+          console.warn(`Playback stuck for 10 seconds, reloading audio`);
+          audio.load();
+          this.play();
+        }
+        if (this._stuckDuration === 20) {
+          console.warn(`Playback stuck for 20 seconds, reloading src`);
+          this._cachedTrackId = null;
+          this._replaceCurrentTrack(this.currentTrackID);
+        }
+        if (this._stuckDuration === 30) {
+          console.warn(`Playback stuck for 30 seconds, skipping track`);
+          this.playNextTrack();
+          this._stuckDuration = 0;
+        }
+      }
+    }
   }
 }

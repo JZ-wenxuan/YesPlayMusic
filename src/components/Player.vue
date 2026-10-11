@@ -41,7 +41,7 @@
             <div class="artist">
               <span
                 v-for="(ar, index) in currentTrack.ar"
-                :key="ar.id"
+                :key="index"
                 @click="ar.id && goToArtist(ar.id)"
               >
                 <span :class="{ ar: ar.id }"> {{ ar.name }} </span
