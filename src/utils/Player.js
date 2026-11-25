@@ -47,7 +47,10 @@ const excludeSaveKeys = [
   '_personalFMLoading',
   '_personalFMNextLoading',
   '_trackSeqNum',
+  '_currentTrackSource',
   '_cachedTrackSource',
+  '_debugMode',
+  '_playingBeforeDebugMode',
 ];
 
 let audio;
@@ -98,7 +101,10 @@ export default class {
     this._volumeBeforeMuted = 1; // 用于保存静音前的音量
     this._personalFMLoading = false; // 是否正在私人FM中加载新的track
     this._personalFMNextLoading = false; // 是否正在缓存私人FM的下一首歌曲
+    /** @type {{ trackId: number, from: 'cache' | 'netease' | 'youtubemusic', url: string } | null} */
     this._currentTrackSource = null;
+    this._debugMode = false; // Playback is held paused while debug mode is on
+    this._playingBeforeDebugMode = false;
 
     // 播放信息
     this._list = []; // 播放列表
@@ -246,6 +252,12 @@ export default class {
   }
   get isCurrentTrackLiked() {
     return store.state.liked.songs.includes(this.currentTrack.id);
+  }
+  get currentTrackSource() {
+    return this._currentTrackSource;
+  }
+  get debugMode() {
+    return this._debugMode;
   }
 
   _init() {
@@ -448,17 +460,15 @@ export default class {
       return null; // let's just query unblock if not logged in
     }
   }
-  async _getAudioSourceFromYouTubeMusic(track) {
-    console.debug(`[debug][Player.js] _getAudioSourceFromYouTubeMusic`);
-
-    if (store.state.settings.enableUnblockNeteaseMusic === false) {
-      return null;
-    }
-
+  /**
+   * Parameters sent to the ytmurl API to look up `track` on YouTube Music.
+   * @returns {{ q: string, dmin: number, dmax: number }}
+   */
+  getYtmurlParams(track) {
     const song = `${track.name || ''}`;
     const artists = track.ar ? track.ar.map(a => a.name).join(' ') : '';
-    const album = `${track.al.name || ''}`;
-    const query = store.state.settings.unmQueryFormat
+    const album = `${track.al?.name || ''}`;
+    const q = store.state.settings.unmQueryFormat
       .replace('$song', song)
       .replace('$artists', artists)
       .replace('$album', album);
@@ -467,15 +477,19 @@ export default class {
     );
     const dmin = Math.ceil(track.dt / 1000 - duration_tolerance);
     const dmax = Math.floor(track.dt / 1000 + duration_tolerance);
+    return { q, dmin, dmax };
+  }
+  async _getAudioSourceFromYouTubeMusic(track) {
+    console.debug(`[debug][Player.js] _getAudioSourceFromYouTubeMusic`);
+
+    if (store.state.settings.enableUnblockNeteaseMusic === false) {
+      return null;
+    }
+
     let retrieveUrl;
     try {
       const response = await fetch(
-        '/api/ytmurl?' +
-          new URLSearchParams({
-            q: query,
-            dmin: dmin,
-            dmax: dmax,
-          })
+        '/api/ytmurl?' + new URLSearchParams(this.getYtmurlParams(track))
       );
       if (response.status !== 200) {
         throw Error(`Got response.status = ${response.status}`);
@@ -492,26 +506,18 @@ export default class {
     }
   }
   async _getAudioSource(track) {
-    let source;
-    try {
-      source = await this._getAudioSourceFromCache(String(track.id));
-      if (source) return source;
-    } catch (error) {
-      console.error(error);
-    }
-
-    try {
-      source = await this._getAudioSourceFromNetease(track);
-      if (source) return source;
-    } catch (error) {
-      console.error(error);
-    }
-
-    try {
-      source = await this._getAudioSourceFromYouTubeMusic(track);
-      if (source) return source;
-    } catch (error) {
-      console.error(error);
+    const providers = [
+      ['cache', () => this._getAudioSourceFromCache(String(track.id))],
+      ['netease', () => this._getAudioSourceFromNetease(track)],
+      ['youtubemusic', () => this._getAudioSourceFromYouTubeMusic(track)],
+    ];
+    for (const [from, getUrl] of providers) {
+      try {
+        const url = await getUrl();
+        if (url) return { trackId: track.id, from, url };
+      } catch (error) {
+        console.error(error);
+      }
     }
     return null;
   }
@@ -570,7 +576,7 @@ export default class {
       let replaced = false;
       if (track.id === this.currentTrackID) {
         this._currentTrackSource = source;
-        audio.src = source;
+        audio.src = source.url;
         audio.load();
         console.log(audio);
         this._state = PLAYER_STATE.IN_PROGRESS;
@@ -626,7 +632,7 @@ export default class {
     const source = await retry(() => this._getAudioSource(track));
     if (this._cachingTrackId !== nextTrackID) return;
 
-    cacheAudio.src = source;
+    cacheAudio.src = source ? source.url : null;
     this._cachedTrackId = nextTrackID;
     this._cachedTrackSource = source;
     console.debug(`Caching next track: ${track.name}`);
@@ -885,6 +891,10 @@ export default class {
     this._pauseDiscordPresence(this._currentTrack);
   }
   async play() {
+    if (this._debugMode) {
+      store.dispatch('showToast', 'Playback is paused in debug mode');
+      return;
+    }
     this.playing = true;
     if (this._state == PLAYER_STATE.IN_PROGRESS) {
       let trackSeqNum = this._trackSeqNum;
@@ -929,6 +939,17 @@ export default class {
       this.pause();
     } else {
       this.play();
+    }
+  }
+  /** Pauses on entering debug mode and resumes on exit if it was playing. */
+  toggleDebugMode() {
+    if (this._debugMode) {
+      this._debugMode = false;
+      if (this._playingBeforeDebugMode) this.play();
+    } else {
+      this._playingBeforeDebugMode = this.playing;
+      this._debugMode = true;
+      this.pause();
     }
   }
   seek(time = null, sendMpris = true) {

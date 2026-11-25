@@ -16,6 +16,7 @@
       <Player v-if="enablePlayer" v-show="showPlayer" ref="player" />
     </transition>
     <Toast />
+    <DebugPanel />
     <ModalAddTrackToPlaylist v-if="isAccountLoggedIn" />
     <ModalNewPlaylist v-if="isAccountLoggedIn" />
     <transition v-if="enablePlayer" name="slide-up">
@@ -31,6 +32,7 @@ import Scrollbar from './components/Scrollbar.vue';
 import Navbar from './components/Navbar.vue';
 import Player from './components/Player.vue';
 import Toast from './components/Toast.vue';
+import DebugPanel from './components/DebugPanel.vue';
 import { ipcRenderer } from './electron/ipcRenderer';
 import { isAccountLoggedIn, isLooseLoggedIn } from '@/utils/auth';
 import Lyrics from './views/lyrics.vue';
@@ -42,6 +44,7 @@ export default {
     Navbar,
     Player,
     Toast,
+    DebugPanel,
     ModalAddTrackToPlaylist,
     ModalNewPlaylist,
     Lyrics,
@@ -83,6 +86,14 @@ export default {
   },
   methods: {
     handleKeydown(e) {
+      // e.code, since Alt+Shift+D yields a symbol in e.key on macOS
+      const isDebugShortcut =
+        e.code === 'KeyD' && e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey;
+      if (isDebugShortcut || (e.key === 'Escape' && this.player.debugMode)) {
+        e.preventDefault();
+        this.player.toggleDebugMode();
+        return;
+      }
       if (e.code === 'Space') {
         if (e.target.tagName === 'INPUT') return false;
         if (this.$route.name === 'mv') return false;
